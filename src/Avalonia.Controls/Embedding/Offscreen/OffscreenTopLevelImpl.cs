@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+
 using Avalonia.Input;
 using Avalonia.Input.Raw;
 using Avalonia.Platform;
 using Avalonia.Rendering;
+using Avalonia.Storage;
 
 namespace Avalonia.Controls.Embedding.Offscreen
 {
@@ -74,6 +76,8 @@ namespace Avalonia.Controls.Embedding.Offscreen
         public void SetTransparencyLevelHint(WindowTransparencyLevel transparencyLevel) { }
 
         public WindowTransparencyLevel TransparencyLevel { get; private set; }
+
+        public IStorageProvider StorageProvider => throw new NotImplementedException();
 
         public IPopupImpl? CreatePopup() => null;
     }

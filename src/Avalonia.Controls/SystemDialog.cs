@@ -9,6 +9,7 @@ namespace Avalonia.Controls
     /// <summary>
     /// Base class for system file dialogs.
     /// </summary>
+    [Obsolete("Use Window.FilePicker API or TopLevel.FilePicker API")]
     public abstract class FileDialog : FileSystemDialog
     {
         /// <summary>
@@ -26,6 +27,7 @@ namespace Avalonia.Controls
     /// <summary>
     /// Base class for system file and directory dialogs.
     /// </summary>
+    [Obsolete("Use Window.FilePicker API or TopLevel.FilePicker API")]
     public abstract class FileSystemDialog : SystemDialog
     {
         [Obsolete("Use Directory")]
@@ -45,6 +47,7 @@ namespace Avalonia.Controls
     /// <summary>
     /// Represents a system dialog that prompts the user to select a location for saving a file.
     /// </summary>
+    [Obsolete("Use Window.FilePicker API or TopLevel.FilePicker API")]
     public class SaveFileDialog : FileDialog
     {
         /// <summary>
@@ -78,6 +81,7 @@ namespace Avalonia.Controls
     /// <summary>
     /// Represents a system dialog that allows the user to select one or more files to open.
     /// </summary>
+    [Obsolete("Use Window.FilePicker API or TopLevel.FilePicker API")]
     public class OpenFileDialog : FileDialog
     {
         /// <summary>
@@ -105,6 +109,7 @@ namespace Avalonia.Controls
     /// <summary>
     /// Represents a system dialog that allows the user to select a directory.
     /// </summary>
+    [Obsolete("Use Window.FilePicker API or TopLevel.FilePicker API")]
     public class OpenFolderDialog : FileSystemDialog
     {
         [Obsolete("Use Directory")]
@@ -135,6 +140,7 @@ namespace Avalonia.Controls
     /// <summary>
     /// Base class for system dialogs.
     /// </summary>
+    [Obsolete("Use Window.FilePicker API or TopLevel.FilePicker API")]
     public abstract class SystemDialog
     {
         /// <summary>
@@ -146,6 +152,7 @@ namespace Avalonia.Controls
     /// <summary>
     /// Represents a filter in an <see cref="OpenFileDialog"/> or an <see cref="SaveFileDialog"/>.
     /// </summary>
+    [Obsolete("Use Window.FilePicker API or TopLevel.FilePicker API")]
     public class FileDialogFilter
     {
         /// <summary>

@@ -12,6 +12,7 @@ using Avalonia.Platform;
 using Avalonia.Rendering;
 using Avalonia.Threading;
 using Avalonia.Utilities;
+using Avalonia.Storage;
 
 namespace Avalonia.Headless
 {
@@ -244,6 +245,8 @@ namespace Avalonia.Headless
         public Action LostFocus { get; set; }
 
         public AcrylicPlatformCompensationLevels AcrylicCompensationLevels => new AcrylicPlatformCompensationLevels(1, 1, 1);
+
+        public IStorageProvider StorageProvider => throw new NotImplementedException();
 
         void IHeadlessWindow.KeyPress(Key key, RawInputModifiers modifiers)
         {

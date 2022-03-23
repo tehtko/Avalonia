@@ -12,6 +12,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Input.Raw;
 using Avalonia.Platform;
 using Avalonia.Rendering;
+using Avalonia.Storage;
 
 namespace Avalonia.DesignerSupport.Remote
 {
@@ -179,6 +180,8 @@ namespace Avalonia.DesignerSupport.Remote
         public bool NeedsManagedDecorations => false;
         
         public AcrylicPlatformCompensationLevels AcrylicCompensationLevels { get; } = new AcrylicPlatformCompensationLevels(1, 1, 1);
+
+        public IStorageProvider StorageProvider => throw new NotImplementedException();
     }
 
     class ClipboardStub : IClipboard

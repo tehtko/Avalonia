@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 
 namespace Avalonia.Controls.Platform
@@ -5,6 +6,7 @@ namespace Avalonia.Controls.Platform
     /// <summary>
     /// Defines a platform-specific system dialog implementation.
     /// </summary>
+    [Obsolete("Use Window.FilePicker API or TopLevel.FilePicker API")]
     public interface ISystemDialogImpl
     {
         /// <summary>

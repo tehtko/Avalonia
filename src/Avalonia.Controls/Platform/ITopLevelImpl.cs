@@ -5,6 +5,8 @@ using Avalonia.Input;
 using Avalonia.Input.Raw;
 using Avalonia.Layout;
 using Avalonia.Rendering;
+using Avalonia.Storage;
+
 using JetBrains.Annotations;
 
 namespace Avalonia.Platform
@@ -172,5 +174,7 @@ namespace Avalonia.Platform
         /// Gets the <see cref="AcrylicPlatformCompensationLevels"/> for the platform.        
         /// </summary>
         AcrylicPlatformCompensationLevels AcrylicCompensationLevels { get; }
+
+        IStorageProvider StorageProvider { get; }
     }
 }
