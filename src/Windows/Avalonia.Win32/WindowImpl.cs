@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Avalonia.Automation.Peers;
 using Avalonia.Controls.Platform;
+using Avalonia.Storage;
 using Avalonia.Input;
 using Avalonia.Input.Raw;
 using Avalonia.Input.TextInput;
@@ -1383,6 +1384,8 @@ namespace Avalonia.Win32
 
         public ITextInputMethodImpl TextInputMethod => Imm32InputMethod.Current;
 
+        public IStorageProvider StorageProvider => throw new NotImplementedException();
+        
         private class WindowImplPlatformHandle : IPlatformHandle
         {
             private readonly WindowImpl _owner;

@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Controls.Platform;
+using Avalonia.Storage;
 using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.FreeDesktop;
 using Avalonia.Input;
@@ -1142,5 +1143,7 @@ namespace Avalonia.X11
         public AcrylicPlatformCompensationLevels AcrylicCompensationLevels { get; } = new AcrylicPlatformCompensationLevels(1, 0.8, 0.8);
 
         public bool NeedsManagedDecorations => false;
+
+        public IStorageProvider StorageProvider => throw new NotImplementedException();
     }
 }

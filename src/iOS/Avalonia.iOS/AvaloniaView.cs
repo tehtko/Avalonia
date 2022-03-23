@@ -6,8 +6,10 @@ using Avalonia.Controls.Platform;
 using Avalonia.Input;
 using Avalonia.Input.Raw;
 using Avalonia.Input.TextInput;
+using Avalonia.iOS.Storage;
 using Avalonia.Platform;
 using Avalonia.Rendering;
+using Avalonia.Storage;
 using CoreAnimation;
 using Foundation;
 using ObjCRuntime;
@@ -51,6 +53,7 @@ namespace Avalonia.iOS
             public TopLevelImpl(AvaloniaView view)
             {
                 _view = view;
+                StorageProvider = new IOSStorageProvider(view.Window.RootViewController);
             }
 
             public void Dispose()
@@ -112,6 +115,8 @@ namespace Avalonia.iOS
                 new AcrylicPlatformCompensationLevels();
 
             public ITextInputMethodImpl? TextInputMethod => _view;
+            
+            public IStorageProvider StorageProvider { get; }
         }
 
         [Export("layerClass")]

@@ -58,7 +58,7 @@ namespace Avalonia.Controls.Platform
                     FileTypes = types
                 };
 
-                var file = await filePicker.SaveAsync(options);
+                var file = await filePicker.SaveFilePickerAsync(options);
                 if (file is null)
                 {
                     return null;

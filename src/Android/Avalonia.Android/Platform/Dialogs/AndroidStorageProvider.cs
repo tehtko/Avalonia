@@ -103,7 +103,7 @@ namespace Avalonia.Android.Storage
             return resultList;
         }
 
-        public async Task<IStorageFile?> SaveAsync(FilePickerSaveOptions options)
+        public async Task<IStorageFile?> SaveFilePickerAsync(FilePickerSaveOptions options)
         {
             try
             {
