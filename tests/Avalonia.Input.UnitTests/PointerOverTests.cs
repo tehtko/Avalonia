@@ -26,7 +26,6 @@ namespace Avalonia.Input.UnitTests
             var renderer = new Mock<IRenderer>();
             var pointer = new Mock<IPointer>();
             var impl = CreateTopLevelImplMock(renderer.Object);
-            var pointerEvent = new PointerEventDetails(default, default, PointerPointProperties.None, KeyModifiers.None);
 
             Canvas canvas;
             var root = CreateInputRoot(impl.Object, new Panel
@@ -38,7 +37,7 @@ namespace Avalonia.Input.UnitTests
             });
 
             SetHit(renderer, canvas);
-            root.SetPointerOver(pointer.Object, pointerEvent);
+            canvas.RaiseEvent(CreatePointerMovedArgs(pointer.Object, root, canvas));
 
             Assert.True(canvas.IsPointerOver);
 
@@ -52,7 +51,6 @@ namespace Avalonia.Input.UnitTests
         {
             var renderer = new Mock<IRenderer>();
             var pointer = new Mock<IPointer>();
-            var pointerEvent = new PointerEventDetails(default, default, PointerPointProperties.None, KeyModifiers.None);
 
             Canvas canvas;
             Border border;
@@ -70,16 +68,14 @@ namespace Avalonia.Input.UnitTests
                 }
             });
 
-            SetHit(renderer, decorator);
-            root.SetPointerOver(pointer.Object, pointerEvent);
+            decorator.RaiseEvent(CreatePointerMovedArgs(pointer.Object, root, decorator));
 
             Assert.True(decorator.IsPointerOver);
             Assert.True(border.IsPointerOver);
             Assert.False(canvas.IsPointerOver);
             Assert.True(root.IsPointerOver);
 
-            SetHit(renderer, canvas);
-            root.SetPointerOver(pointer.Object, pointerEvent);
+            canvas.RaiseEvent(CreatePointerMovedArgs(pointer.Object, root, canvas));
 
             Assert.False(decorator.IsPointerOver);
             Assert.False(border.IsPointerOver);
@@ -88,11 +84,33 @@ namespace Avalonia.Input.UnitTests
         }
 
         [Fact]
+        public void TouchMove_Should_Not_Set_IsPointerOver()
+        {
+            var renderer = new Mock<IRenderer>();
+            var pointer = new Mock<IPointer>();
+            pointer.SetupGet(p => p.Type).Returns(PointerType.Touch);
+
+            Canvas canvas;
+
+            var root = CreateInputRoot(renderer.Object, new Panel
+            {
+                Children =
+                {
+                    (canvas = new Canvas())
+                }
+            });
+
+            canvas.RaiseEvent(CreatePointerMovedArgs(pointer.Object, root, canvas));
+
+            Assert.False(canvas.IsPointerOver);
+            Assert.False(root.IsPointerOver);
+        }
+
+        [Fact]
         public void IsPointerOver_Should_Be_Updated_When_Child_Sets_Handled_True()
         {
             var renderer = new Mock<IRenderer>();
             var pointer = new Mock<IPointer>();
-            var pointerEvent = new PointerEventDetails(default, default, PointerPointProperties.None, KeyModifiers.None);
 
             Canvas canvas;
             Border border;
@@ -110,8 +128,7 @@ namespace Avalonia.Input.UnitTests
                 }
             });
 
-            SetHit(renderer, canvas);
-            root.SetPointerOver(pointer.Object, pointerEvent);
+            canvas.RaiseEvent(CreatePointerMovedArgs(pointer.Object, root, canvas));
 
             Assert.False(decorator.IsPointerOver);
             Assert.False(border.IsPointerOver);
@@ -119,10 +136,10 @@ namespace Avalonia.Input.UnitTests
             Assert.True(root.IsPointerOver);
 
             // Ensure that e.Handled is reset between controls.
+            root.PointerMoved += (s, e) => e.Handled = true;
             decorator.PointerEnter += (s, e) => e.Handled = true;
 
-            SetHit(renderer, decorator);
-            root.SetPointerOver(pointer.Object, pointerEvent);
+            decorator.RaiseEvent(CreatePointerMovedArgs(pointer.Object, root, decorator));
 
             Assert.True(decorator.IsPointerOver);
             Assert.True(border.IsPointerOver);
@@ -135,7 +152,6 @@ namespace Avalonia.Input.UnitTests
         {
             var renderer = new Mock<IRenderer>();
             var pointer = new Mock<IPointer>();
-            var pointerEvent = new PointerEventDetails(default, default, PointerPointProperties.None, KeyModifiers.None);
             var result = new List<(object?, string)>();
 
             void HandleEvent(object? sender, PointerEventArgs e)
@@ -159,13 +175,11 @@ namespace Avalonia.Input.UnitTests
                 }
             });
 
-            SetHit(renderer, canvas);
-            root.SetPointerOver(pointer.Object, pointerEvent);
+            canvas.RaiseEvent(CreatePointerMovedArgs(pointer.Object, root, canvas));
 
             AddEnterLeaveHandlers(HandleEvent, root, canvas, border, decorator);
 
-            SetHit(renderer, decorator);
-            root.SetPointerOver(pointer.Object, pointerEvent);
+            decorator.RaiseEvent(CreatePointerMovedArgs(pointer.Object, root, decorator));
 
             Assert.Equal(
                 new[]
@@ -184,8 +198,6 @@ namespace Avalonia.Input.UnitTests
             var expectedPosition = new Point(15, 15);
             var renderer = new Mock<IRenderer>();
             var pointer = new Mock<IPointer>();
-            var pointerEvent = new PointerEventDetails(default, expectedPosition,
-                PointerPointProperties.None, KeyModifiers.None);
             var result = new List<(object?, string, Point)>();
 
             void HandleEvent(object? sender, PointerEventArgs e)
@@ -205,19 +217,18 @@ namespace Avalonia.Input.UnitTests
 
             AddEnterLeaveHandlers(HandleEvent, root, canvas);
 
-            SetHit(renderer, canvas);
-            var pointerOver = root.SetPointerOver(pointer.Object, pointerEvent);
-            Assert.Equal(canvas, pointerOver);
+            canvas.RaiseEvent(CreatePointerMovedArgs(pointer.Object, root, canvas, expectedPosition));
 
-            root.ClearPointerOver(pointer.Object, pointerEvent);
+            // If source is not set, TopLevel will try to get element by position, so fake hit test too.
+            SetHit(renderer, null);
+            root.RaiseEvent(CreatePointerMovedArgs(pointer.Object, root, null, expectedPosition));
 
             Assert.Equal(
                 new[]
                 {
                     ((object?)canvas, "PointerEnter", expectedPosition),
                     (root, "PointerEnter", expectedPosition),
-                    (canvas, "PointerLeave", expectedPosition),
-                    (root, "PointerLeave", expectedPosition),
+                    (canvas, "PointerLeave", expectedPosition)
                 },
                 result);
         }
@@ -232,7 +243,6 @@ namespace Avalonia.Input.UnitTests
 
             var pointer = new Mock<IPointer>();
             var pointerDevice = new Mock<IPointerDevice>();
-            var pointerEvent = new PointerEventDetails(default, default, PointerPointProperties.None, KeyModifiers.None);
             var invalidateRect = new Rect(0, 0, 15, 15);
 
             Canvas canvas;
@@ -248,12 +258,12 @@ namespace Avalonia.Input.UnitTests
             var rawArgs = new RawInputEventArgs(pointerDevice.Object, 0, root);
 
             // Let input know about latest device.
-            SetHit(renderer, canvas);
             pointerDevice.Setup(d => d.ProcessRawEvent(rawArgs))
-                .Callback(() => root.SetPointerOver(pointer.Object, pointerEvent));
+                .Callback(() => canvas.RaiseEvent(CreatePointerMovedArgs(pointer.Object, root, canvas)));
             impl.Object.Input!(rawArgs);
             Assert.True(canvas.IsPointerOver);
 
+            SetHit(renderer, canvas);
             renderer.Raise(r => r.SceneInvalidated += null, new SceneInvalidatedEventArgs((IRenderRoot)root, invalidateRect));
             Assert.True(canvas.IsPointerOver);
 
@@ -263,6 +273,7 @@ namespace Avalonia.Input.UnitTests
             Assert.False(canvas.IsPointerOver);
         }
 
+        // https://github.com/AvaloniaUI/Avalonia/issues/7748
         [Fact]
         public void LeaveWindow_Should_Reset_PointerOver()
         {
@@ -274,7 +285,6 @@ namespace Avalonia.Input.UnitTests
             var pointer = new Mock<IPointer>();
             var pointerDevice = new Mock<IPointerDevice>();
             var lastClientPosition = new Point(1, 5);
-            var pointerEvent = new PointerEventDetails(default, lastClientPosition, PointerPointProperties.None, KeyModifiers.None);
             var invalidateRect = new Rect(0, 0, 15, 15);
             var result = new List<(object?, string, Point)>();
 
@@ -296,10 +306,9 @@ namespace Avalonia.Input.UnitTests
             AddEnterLeaveHandlers(HandleEvent, root, canvas);
 
             // Init pointer over.
-            SetHit(renderer, canvas);
             var firstInputArgs = new RawInputEventArgs(pointerDevice.Object, 0, root);
             pointerDevice.Setup(d => d.ProcessRawEvent(firstInputArgs))
-                .Callback(() => root.SetPointerOver(pointer.Object, pointerEvent));
+                .Callback(() => canvas.RaiseEvent(CreatePointerMovedArgs(pointer.Object, root, canvas, lastClientPosition)));
             impl.Object.Input!(firstInputArgs);
             Assert.True(canvas.IsPointerOver);
 
@@ -369,6 +378,14 @@ namespace Avalonia.Input.UnitTests
         private static IInputRoot CreateInputRoot(IRenderer renderer, IControl child)
         {
             return CreateInputRoot(CreateTopLevelImplMock(renderer).Object, child);
+        }
+
+        private static PointerEventArgs CreatePointerMovedArgs(
+            IPointer pointer, IInputRoot root, IInputElement? source,
+            Point? positition = null)
+        {
+            return new PointerEventArgs(InputElement.PointerMovedEvent, source, pointer, root,
+                positition ?? default, default, PointerPointProperties.None, KeyModifiers.None);
         }
     }
 }

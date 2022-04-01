@@ -104,7 +104,7 @@ namespace Avalonia.Input
             {
                 case RawPointerEventType.LeaveWindow:
                 case RawPointerEventType.NonClientLeftButtonDown:
-                    LeaveWindow(mouse, e.Timestamp, e.Root, oldPosition, props, keyModifiers);
+                    LeaveWindow();
                     break;
                 case RawPointerEventType.LeftButtonDown:
                 case RawPointerEventType.RightButtonDown:
@@ -145,17 +145,10 @@ namespace Avalonia.Input
             }
         }
 
-        private void LeaveWindow(IMouseDevice device, ulong timestamp, IInputRoot root, PixelPoint? position, PointerPointProperties properties,
-            KeyModifiers inputModifiers)
+        private void LeaveWindow()
         {
-            device = device ?? throw new ArgumentNullException(nameof(device));
-            root = root ?? throw new ArgumentNullException(nameof(root));
-
-            var oldPosition = position.HasValue ? root.PointToClient(position.Value) : new Point(-1, -1);
             _position = null;
-            root.ClearPointerOver(_pointer, new PointerEventDetails(timestamp, oldPosition, properties, inputModifiers));
         }
-
 
         PointerPointProperties CreateProperties(RawPointerEventArgs args)
         {
@@ -230,7 +223,7 @@ namespace Avalonia.Input
             device = device ?? throw new ArgumentNullException(nameof(device));
             root = root ?? throw new ArgumentNullException(nameof(root));
 
-            var source = root.SetPointerOver(_pointer, new PointerEventDetails(timestamp, p, properties, inputModifiers));
+            var source = _pointer.Captured ?? root.InputHitTest(p);
 
             if (source is object)
             {
@@ -389,6 +382,7 @@ namespace Avalonia.Input
         [Obsolete]
         public void SceneInvalidated(IInputRoot root, Rect rect)
         {
+            // no-op
         }
     }
 }

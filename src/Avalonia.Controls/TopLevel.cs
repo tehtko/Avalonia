@@ -194,6 +194,8 @@ namespace Avalonia.Controls
             }
 
             impl.LostFocus += PlatformImpl_LostFocus;
+
+            AddHandler(PointerMovedEvent, HandleOnPointerMovedEvent, Interactivity.RoutingStrategies.Tunnel);
         }
 
         /// <summary>
@@ -519,11 +521,20 @@ namespace Avalonia.Controls
                 && _lastPointer is (var pointer, var position))
             {
                 _lastPointer = null;
-                ClearPointerOver(pointer,
-                    new PointerEventDetails(0, this.PointToClient(position), PointerPointProperties.None, KeyModifiers.None));
+                ClearPointerOver(pointer, 0, this.PointToClient(position), PointerPointProperties.None, KeyModifiers.None);
             }
 
             _inputManager?.ProcessInput(e);
+        }
+
+        private void HandleOnPointerMovedEvent(object? sender, PointerEventArgs e)
+        {
+            // Do not set pointerover on touch input.
+            if (e.Pointer.Type != PointerType.Touch)
+            {
+                var point = e.GetCurrentPoint(null);
+                SetPointerOver(e.Pointer, e.Source as IInputElement, e.Timestamp, point.Position, point.Properties, e.KeyModifiers);
+            }
         }
 
         private void SceneInvalidated(object? sender, SceneInvalidatedEventArgs e)
@@ -535,13 +546,11 @@ namespace Avalonia.Controls
 
                 if (e.DirtyRect.Contains(clientPoint))
                 {
-                    SetPointerOver(pointer,
-                        new PointerEventDetails(0, clientPoint, PointerPointProperties.None, KeyModifiers.None));
+                    SetPointerOver(pointer, null, 0, clientPoint, PointerPointProperties.None, KeyModifiers.None);
                 }
                 else if (!Bounds.Contains(clientPoint))
                 {
-                    ClearPointerOver(pointer,
-                        new PointerEventDetails(0, new Point(-1,-1), PointerPointProperties.None, KeyModifiers.None));
+                    ClearPointerOver(pointer, 0, new Point(-1,-1), PointerPointProperties.None, KeyModifiers.None);
                 }
             }
         }
@@ -561,11 +570,9 @@ namespace Avalonia.Controls
         ITextInputMethodImpl? ITextInputMethodRoot.InputMethod =>
             (PlatformImpl as ITopLevelImplWithTextInputMethod)?.TextInputMethod;
 
-        public void ClearPointerOver(IPointer pointer, PointerEventDetails pointerEvent)
+        private void ClearPointerOver(IPointer pointer,
+            ulong timestamp, Point position, PointerPointProperties properties, KeyModifiers inputModifiers)
         {
-            pointer = pointer ?? throw new ArgumentNullException(nameof(pointer));
-            pointerEvent = pointerEvent ?? throw new ArgumentNullException(nameof(pointerEvent));
-
             var element = ((IInputRoot)this).PointerOverElement;
             if (element is null)
             {
@@ -574,10 +581,10 @@ namespace Avalonia.Controls
 
             // Do not pass rootVisual, when we have unknown (negative) position,
             // so GetPosition won't return invalid values.
-            var hasPosition = pointerEvent.Position.X >= 0 && pointerEvent.Position.Y >= 0;
+            var hasPosition = position.X >= 0 && position.Y >= 0;
             var e = new PointerEventArgs(PointerLeaveEvent, element, pointer,
-                hasPosition ? this : null, hasPosition ? pointerEvent.Position : default,
-                pointerEvent.Timestamp, pointerEvent.Properties, pointerEvent.InputModifiers);
+                hasPosition ? this : null, hasPosition ? position : default,
+                timestamp, properties, inputModifiers);
 
             if (element != null && !element.IsAttachedToVisualTree)
             {
@@ -622,46 +629,31 @@ namespace Avalonia.Controls
         {
             if (_lastPointer is (var pointer, var _))
             {
-                var pointerEvent = new PointerEventDetails(0, new Point(-1, -1), PointerPointProperties.None, KeyModifiers.None);
-                ((IInputRoot)this).ClearPointerOver(pointer, pointerEvent);
+                ClearPointerOver(pointer, 0, new Point(-1, -1), PointerPointProperties.None, KeyModifiers.None);
             }
         }
 
-        public IInputElement? SetPointerOver(IPointer pointer, PointerEventDetails pointerEvent)
+        private void SetPointerOver(IPointer pointer, IInputElement? source,
+            ulong timestamp, Point position, PointerPointProperties properties, KeyModifiers inputModifiers)
         {
-            pointer = pointer ?? throw new ArgumentNullException(nameof(pointer));
-            pointerEvent = pointerEvent ?? throw new ArgumentNullException(nameof(pointerEvent));
-
             var pointerOverElement = ((IInputRoot)this).PointerOverElement;
-            if (pointer.Captured is { } captured)
-            {
-                if (pointerOverElement != captured)
-                {
-                    SetPointerOver(pointer, captured, pointerEvent);
-                }
-                return captured;
-            }
-            else
-            {
-                var element = this.InputHitTest(pointerEvent.Position);
+            var element = source ?? this.InputHitTest(position);
 
-                if (element != pointerOverElement)
+            if (element != pointerOverElement)
+            {
+                if (element != null)
                 {
-                    if (element != null)
-                    {
-                        SetPointerOver(pointer, element, pointerEvent);
-                    }
-                    else
-                    {
-                        ((IInputRoot)this).ClearPointerOver(pointer, pointerEvent);
-                    }
+                    SetPointerOverToElement(pointer, element, timestamp, position, properties, inputModifiers);
                 }
-
-                return element;
+                else
+                {
+                    ClearPointerOver(pointer, timestamp, position, properties, inputModifiers);
+                }
             }
         }
 
-        private void SetPointerOver(IPointer pointer, IInputElement element, PointerEventDetails pointerEvent)
+        private void SetPointerOverToElement(IPointer pointer, IInputElement element,
+            ulong timestamp, Point position, PointerPointProperties properties, KeyModifiers inputModifiers)
         {
             IInputElement? branch = null;
 
@@ -679,8 +671,8 @@ namespace Avalonia.Controls
 
             el = ((IInputRoot)this).PointerOverElement;
 
-            var e = new PointerEventArgs(PointerLeaveEvent, el, pointer, this, pointerEvent.Position,
-                pointerEvent.Timestamp, pointerEvent.Properties, pointerEvent.InputModifiers);
+            var e = new PointerEventArgs(PointerLeaveEvent, el, pointer, this, position,
+                timestamp, properties, inputModifiers);
             if (el != null && branch != null && !el.IsAttachedToVisualTree)
             {
                 ClearChildrenPointerOver(e, branch, false);
@@ -695,7 +687,7 @@ namespace Avalonia.Controls
             }
 
             el = ((IInputRoot)this).PointerOverElement = element;
-            _lastPointer = (pointer, this.PointToScreen(pointerEvent.Position));
+            _lastPointer = (pointer, this.PointToScreen(position));
 
             e.RoutedEvent = InputElement.PointerEnterEvent;
 

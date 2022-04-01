@@ -29,22 +29,5 @@ namespace Avalonia.Input
         /// Gets associated mouse device
         /// </summary>
         IMouseDevice? MouseDevice { get; }
-
-        /// <summary>
-        /// Finds and sets new pointer over element by generating <see cref="InputElement.PointerEnterEvent"/> and <see cref="InputElement.PointerLeaveEvent"/> events.
-        /// Clears previous event.
-        /// </summary>
-        /// <param name="pointer">Pointer used in generated event arguments.</param>
-        /// <param name="pointerEvent">Events details used in generated event arguments.</param>
-        /// <returns>New pointer over element if found or null.</returns>
-        IInputElement? SetPointerOver(IPointer pointer, PointerEventDetails pointerEvent);
-
-        /// <summary>
-        /// Clears current pointer over element.
-        /// Generates <see cref="InputElement.PointerLeaveEvent"/> event.
-        /// </summary>
-        /// <param name="pointer">Pointer used in generated event arguments.</param>
-        /// <param name="pointerEvent">Events details used in generated event arguments.</param>
-        void ClearPointerOver(IPointer pointer, PointerEventDetails pointerEvent);
     }
 }
