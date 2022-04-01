@@ -63,11 +63,6 @@ namespace Avalonia.Input
             }
 
             public Point GetPosition(IVisual relativeTo) => _ev.GetPosition(relativeTo);
-
-            public void SceneInvalidated(IInputRoot root, Rect rect)
-            {
-                // no-op
-            }
         }
 
         public IPointer Pointer { get; }

@@ -16,7 +16,5 @@ namespace Avalonia.Input
         /// <inheritdoc cref="PointerEventArgs.GetPosition(IVisual?)" />
         [Obsolete("Use PointerEventArgs.GetPosition")]
         Point GetPosition(IVisual relativeTo);
-
-        void SceneInvalidated(IInputRoot root, Rect rect);
     }
 }

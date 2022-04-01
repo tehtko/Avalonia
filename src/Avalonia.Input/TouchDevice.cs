@@ -132,11 +132,5 @@ namespace Avalonia.Input
             foreach (var p in values)
                 p.Dispose();
         }
-
-        public void SceneInvalidated(IInputRoot root, Rect rect)
-        {
-            // Touch input doesn't generate pointer entered/exited events,
-            // So we have nothing to invalidate here.
-        }
     }
 }

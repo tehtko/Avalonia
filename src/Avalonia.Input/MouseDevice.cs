@@ -72,29 +72,6 @@ namespace Avalonia.Input
                 ProcessRawEvent(margs);
         }
 
-        public void SceneInvalidated(IInputRoot root, Rect rect)
-        {
-            // Pointer is outside of the target area
-            if (_position == null)
-            {
-                if (root.PointerOverElement != null)
-                {
-                    root.ClearPointerOver(_pointer,
-                        new PointerEventDetails(0, new Point(-1, -1), PointerPointProperties.None, KeyModifiers.None));
-                }
-                return;
-            }
-            
-            
-            var clientPoint = root.PointToClient(_position.Value);
-
-            if (rect.Contains(clientPoint))
-            {
-                _ = root.SetPointerOver(_pointer,
-                    new PointerEventDetails(0, clientPoint, PointerPointProperties.None, KeyModifiers.None));
-            }
-        }
-
         int ButtonCount(PointerPointProperties props)
         {
             var rv = 0;
@@ -403,9 +380,15 @@ namespace Avalonia.Input
             _pointer?.Dispose();
         }
 
+        [Obsolete]
         public void TopLevelClosed(IInputRoot root)
         {
             // no-op
+        }
+
+        [Obsolete]
+        public void SceneInvalidated(IInputRoot root, Rect rect)
+        {
         }
     }
 }

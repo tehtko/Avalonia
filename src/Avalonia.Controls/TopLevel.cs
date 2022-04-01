@@ -90,7 +90,7 @@ namespace Avalonia.Controls
         private ILayoutManager? _layoutManager;
         private Border? _transparencyFallbackBorder;
         private IPointerDevice? _lastActivePointerDevice;
-        private IPointer? _lastPointer;
+        private (IPointer pointer, PixelPoint position)? _lastPointer;
 
         /// <summary>
         /// Initializes static members of the <see cref="TopLevel"/> class.
@@ -514,12 +514,35 @@ namespace Avalonia.Controls
             // Set last active device before processing input, because ClearPointerOver might be called and clear last device.
             _lastActivePointerDevice = e.Device as IPointerDevice;
 
+            if (e is RawPointerEventArgs { Type: RawPointerEventType.LeaveWindow or RawPointerEventType.NonClientLeftButtonDown }
+                && _lastPointer is (var pointer, var position))
+            {
+                _lastPointer = null;
+                ClearPointerOver(pointer,
+                    new PointerEventDetails(0, this.PointToClient(position), PointerPointProperties.None, KeyModifiers.None));
+            }
+
             _inputManager?.ProcessInput(e);
         }
 
         private void SceneInvalidated(object? sender, SceneInvalidatedEventArgs e)
         {
-            _lastActivePointerDevice?.SceneInvalidated(this, e.DirtyRect);
+            // Pointer is outside of the target area
+            if (_lastPointer is (var pointer, var position))
+            {
+                var clientPoint = this.PointToClient(position);
+
+                if (e.DirtyRect.Contains(clientPoint))
+                {
+                    SetPointerOver(pointer,
+                        new PointerEventDetails(0, clientPoint, PointerPointProperties.None, KeyModifiers.None));
+                }
+                else if (!Bounds.Contains(clientPoint))
+                {
+                    ClearPointerOver(pointer,
+                        new PointerEventDetails(0, new Point(-1,-1), PointerPointProperties.None, KeyModifiers.None));
+                }
+            }
         }
 
         void PlatformImpl_LostFocus()
@@ -537,7 +560,7 @@ namespace Avalonia.Controls
         ITextInputMethodImpl? ITextInputMethodRoot.InputMethod =>
             (PlatformImpl as ITopLevelImplWithTextInputMethod)?.TextInputMethod;
 
-        void IInputRoot.ClearPointerOver(IPointer pointer, PointerEventDetails pointerEvent)
+        public void ClearPointerOver(IPointer pointer, PointerEventDetails pointerEvent)
         {
             pointer = pointer ?? throw new ArgumentNullException(nameof(pointer));
             pointerEvent = pointerEvent ?? throw new ArgumentNullException(nameof(pointerEvent));
@@ -596,14 +619,14 @@ namespace Avalonia.Controls
 
         private void ClearPointerOver()
         {
-            if (_lastPointer is not null)
+            if (_lastPointer is (var pointer, var _))
             {
                 var pointerEvent = new PointerEventDetails(0, new Point(-1, -1), PointerPointProperties.None, KeyModifiers.None);
-                ((IInputRoot)this).ClearPointerOver(_lastPointer, pointerEvent);
+                ((IInputRoot)this).ClearPointerOver(pointer, pointerEvent);
             }
         }
 
-        IInputElement? IInputRoot.SetPointerOver(IPointer pointer, PointerEventDetails pointerEvent)
+        public IInputElement? SetPointerOver(IPointer pointer, PointerEventDetails pointerEvent)
         {
             pointer = pointer ?? throw new ArgumentNullException(nameof(pointer));
             pointerEvent = pointerEvent ?? throw new ArgumentNullException(nameof(pointerEvent));
@@ -671,8 +694,7 @@ namespace Avalonia.Controls
             }
 
             el = ((IInputRoot)this).PointerOverElement = element;
-            //_lastActivePointerDevice = device;
-            _lastPointer = pointer;
+            _lastPointer = (pointer, this.PointToScreen(pointerEvent.Position));
 
             e.RoutedEvent = InputElement.PointerEnterEvent;
 

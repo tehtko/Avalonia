@@ -16,7 +16,7 @@ namespace Avalonia.Input
         [Obsolete]
         void TopLevelClosed(IInputRoot root);
 
-        [Obsolete("Use IPointerDevice.SceneInvalidated")]
+        [Obsolete]
         void SceneInvalidated(IInputRoot root, Rect rect);
     }
 }

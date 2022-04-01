@@ -223,7 +223,7 @@ namespace Avalonia.Input.UnitTests
         }
 
         [Fact]
-        public void Render_Invalidation_Should_Call_SceneInvalidated_On_Device()
+        public void Render_Invalidation_Should_Affect_PointerOver()
         {
             using var app = UnitTestApplication.Start(new TestServices(inputManager: new InputManager()));
 
@@ -247,27 +247,24 @@ namespace Avalonia.Input.UnitTests
 
             var rawArgs = new RawInputEventArgs(pointerDevice.Object, 0, root);
 
-            // Let input know about latest device
+            // Let input know about latest device.
             SetHit(renderer, canvas);
             pointerDevice.Setup(d => d.ProcessRawEvent(rawArgs))
                 .Callback(() => root.SetPointerOver(pointer.Object, pointerEvent));
             impl.Object.Input!(rawArgs);
+            Assert.True(canvas.IsPointerOver);
 
             renderer.Raise(r => r.SceneInvalidated += null, new SceneInvalidatedEventArgs((IRenderRoot)root, invalidateRect));
-            pointerDevice.Verify(d => d.SceneInvalidated(root, invalidateRect), Times.Once);
+            Assert.True(canvas.IsPointerOver);
 
-            // Raise another raw event, but this time clean pointerover.
-            pointerDevice.Setup(d => d.ProcessRawEvent(rawArgs))
-                .Callback(() => root.ClearPointerOver(pointer.Object, pointerEvent));
-            impl.Object.Input!(rawArgs);
-
-            // SceneInvalidated should not be called second time
+            // Raise SceneInvalidated again, but now hide element from the hittest.
+            SetHit(renderer, null);
             renderer.Raise(r => r.SceneInvalidated += null, new SceneInvalidatedEventArgs((IRenderRoot)root, invalidateRect));
-            pointerDevice.Verify(d => d.SceneInvalidated(root, invalidateRect), Times.Once);
+            Assert.False(canvas.IsPointerOver);
         }
 
         [Fact]
-        public void Render_Invalidation_Should_Call_SceneInvalidated_Only_On_Latest_Device()
+        public void LeaveWindow_Should_Reset_PointerOver()
         {
             using var app = UnitTestApplication.Start(new TestServices(inputManager: new InputManager()));
 
@@ -275,12 +272,19 @@ namespace Avalonia.Input.UnitTests
             var impl = CreateTopLevelImplMock(renderer.Object);
 
             var pointer = new Mock<IPointer>();
-            var pointerDevice1 = new Mock<IPointerDevice>();
-            var pointerDevice2 = new Mock<IPointerDevice>();
-            var pointerEvent = new PointerEventDetails(default, default, PointerPointProperties.None, KeyModifiers.None);
+            var pointerDevice = new Mock<IPointerDevice>();
+            var lastClientPosition = new Point(1, 5);
+            var pointerEvent = new PointerEventDetails(default, lastClientPosition, PointerPointProperties.None, KeyModifiers.None);
             var invalidateRect = new Rect(0, 0, 15, 15);
+            var result = new List<(object?, string, Point)>();
+
+            void HandleEvent(object? sender, PointerEventArgs e)
+            {
+                result.Add((sender, e.RoutedEvent!.Name, e.GetPosition(null)));
+            }
 
             Canvas canvas;
+
             var root = CreateInputRoot(impl.Object, new Panel
             {
                 Children =
@@ -288,23 +292,30 @@ namespace Avalonia.Input.UnitTests
                     (canvas = new Canvas())
                 }
             });
-            var rawArgs = new RawInputEventArgs(pointerDevice1.Object, 0, root);
 
-            // Let input root to know about first device.
+            AddEnterLeaveHandlers(HandleEvent, root, canvas);
+
+            // Init pointer over.
             SetHit(renderer, canvas);
-            pointerDevice1.Setup(d => d.ProcessRawEvent(It.IsAny<RawInputEventArgs>()))
+            var firstInputArgs = new RawInputEventArgs(pointerDevice.Object, 0, root);
+            pointerDevice.Setup(d => d.ProcessRawEvent(firstInputArgs))
                 .Callback(() => root.SetPointerOver(pointer.Object, pointerEvent));
-            impl.Object.Input!(new RawInputEventArgs(pointerDevice1.Object, 0, root));
+            impl.Object.Input!(firstInputArgs);
+            Assert.True(canvas.IsPointerOver);
 
-            // Let input root to know about second device.
-            pointerDevice2.Setup(d => d.ProcessRawEvent(It.IsAny<RawInputEventArgs>()))
-                .Callback(() => root.SetPointerOver(pointer.Object, pointerEvent));
-            impl.Object.Input!(new RawInputEventArgs(pointerDevice2.Object, 0, root));
+            // Send LeaveWindow.
+            impl.Object.Input!(new RawPointerEventArgs(pointerDevice.Object, 0, root, RawPointerEventType.LeaveWindow, new Point(), default));
+            Assert.False(canvas.IsPointerOver);
 
-            // SceneInvalidated should be called only on latest pointer device.
-            renderer.Raise(r => r.SceneInvalidated += null, new SceneInvalidatedEventArgs((IRenderRoot)root, invalidateRect));
-            pointerDevice1.Verify(d => d.SceneInvalidated(root, invalidateRect), Times.Never);
-            pointerDevice2.Verify(d => d.SceneInvalidated(root, invalidateRect), Times.Once);
+            Assert.Equal(
+                new[]
+                {
+                    ((object?)canvas, "PointerEnter", lastClientPosition),
+                    (root, "PointerEnter", lastClientPosition),
+                    (canvas, "PointerLeave", lastClientPosition),
+                    (root, "PointerLeave", lastClientPosition),
+                },
+                result);
         }
 
         private static void AddEnterLeaveHandlers(
@@ -318,10 +329,10 @@ namespace Avalonia.Input.UnitTests
             }
         }
 
-        private static void SetHit(Mock<IRenderer> renderer, IControl hit)
+        private static void SetHit(Mock<IRenderer> renderer, IControl? hit)
         {
             renderer.Setup(x => x.HitTest(It.IsAny<Point>(), It.IsAny<IVisual>(), It.IsAny<Func<IVisual, bool>>()))
-                .Returns(new[] { hit });
+                .Returns(hit is null ? Array.Empty<IControl>() : new[] { hit });
 
             renderer.Setup(x => x.HitTestFirst(It.IsAny<Point>(), It.IsAny<IVisual>(), It.IsAny<Func<IVisual, bool>>()))
                 .Returns(hit);
@@ -334,6 +345,8 @@ namespace Avalonia.Input.UnitTests
             impl.SetupAllProperties();
             impl.SetupGet(r => r.RenderScaling).Returns(1);
             impl.Setup(r => r.CreateRenderer(It.IsAny<IRenderRoot>())).Returns(renderer);
+            impl.Setup(r => r.PointToScreen(It.IsAny<Point>())).Returns<Point>(p => new PixelPoint((int)p.X, (int)p.Y));
+            impl.Setup(r => r.PointToClient(It.IsAny<PixelPoint>())).Returns<PixelPoint>(p => new Point(p.X, p.Y));
             return impl;
         }
 
