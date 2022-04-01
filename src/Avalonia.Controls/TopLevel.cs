@@ -14,7 +14,6 @@ using Avalonia.Rendering;
 using Avalonia.Styling;
 using Avalonia.Utilities;
 using Avalonia.VisualTree;
-using JetBrains.Annotations;
 
 namespace Avalonia.Controls
 {
@@ -90,6 +89,8 @@ namespace Avalonia.Controls
         private WindowTransparencyLevel _actualTransparencyLevel;
         private ILayoutManager? _layoutManager;
         private Border? _transparencyFallbackBorder;
+        private IPointerDevice? _lastActivePointerDevice;
+        private IPointer? _lastPointer;
 
         /// <summary>
         /// Initializes static members of the <see cref="TopLevel"/> class.
@@ -281,9 +282,7 @@ namespace Avalonia.Controls
         /// </summary>
         IKeyboardNavigationHandler IInputRoot.KeyboardNavigationHandler => _keyboardNavigationHandler!;
 
-        /// <summary>
-        /// Gets or sets the input element that the pointer is currently over.
-        /// </summary>
+        /// <inheritdoc/>
         IInputElement? IInputRoot.PointerOverElement
         {
             get { return GetValue(PointerOverElementProperty); }
@@ -370,10 +369,10 @@ namespace Avalonia.Controls
 
             Renderer?.Dispose();
             Renderer = null!;
-            
-            (this as IInputRoot).MouseDevice?.TopLevelClosed(this);
+
+            ClearPointerOver();
             PlatformImpl = null;
-            
+
             var logicalArgs = new LogicalTreeAttachmentEventArgs(this, this, null);
             ((ILogical)this).NotifyDetachedFromLogicalTree(logicalArgs);
 
@@ -507,12 +506,20 @@ namespace Avalonia.Controls
         /// <param name="e">The event args.</param>
         private void HandleInput(RawInputEventArgs e)
         {
+            if (e.Device != _lastActivePointerDevice)
+            {
+                ClearPointerOver();
+            }
+
+            // Set last active device before processing input, because ClearPointerOver might be called and clear last device.
+            _lastActivePointerDevice = e.Device as IPointerDevice;
+
             _inputManager?.ProcessInput(e);
         }
 
         private void SceneInvalidated(object? sender, SceneInvalidatedEventArgs e)
         {
-            (this as IInputRoot).MouseDevice?.SceneInvalidated(this, e.DirtyRect);
+            _lastActivePointerDevice?.SceneInvalidated(this, e.DirtyRect);
         }
 
         void PlatformImpl_LostFocus()
@@ -529,5 +536,153 @@ namespace Avalonia.Controls
 
         ITextInputMethodImpl? ITextInputMethodRoot.InputMethod =>
             (PlatformImpl as ITopLevelImplWithTextInputMethod)?.TextInputMethod;
+
+        void IInputRoot.ClearPointerOver(IPointer pointer, PointerEventDetails pointerEvent)
+        {
+            pointer = pointer ?? throw new ArgumentNullException(nameof(pointer));
+            pointerEvent = pointerEvent ?? throw new ArgumentNullException(nameof(pointerEvent));
+
+            var element = ((IInputRoot)this).PointerOverElement;
+            if (element is null)
+            {
+                return;
+            }
+
+            // Do not pass rootVisual, when we have unknown (negative) position,
+            // so GetPosition won't return invalid values.
+            var hasPosition = pointerEvent.Position.X >= 0 && pointerEvent.Position.Y >= 0;
+            var e = new PointerEventArgs(PointerLeaveEvent, element, pointer,
+                hasPosition ? this : null, hasPosition ? pointerEvent.Position : default,
+                pointerEvent.Timestamp, pointerEvent.Properties, pointerEvent.InputModifiers);
+
+            if (element != null && !element.IsAttachedToVisualTree)
+            {
+                // element has been removed from visual tree so do top down cleanup
+                if (IsPointerOver)
+                {
+                    ClearChildrenPointerOver(e, this, true);
+                }
+            }
+            while (element != null)
+            {
+                e.Source = element;
+                e.Handled = false;
+                element.RaiseEvent(e);
+                element = (IInputElement?)element.VisualParent;
+            }
+
+            ClearValue(PointerOverElementProperty);
+            _lastActivePointerDevice = null;
+            _lastPointer = null;
+        }
+
+        private void ClearChildrenPointerOver(PointerEventArgs e, IInputElement element, bool clearRoot)
+        {
+            foreach (IInputElement el in element.VisualChildren)
+            {
+                if (el.IsPointerOver)
+                {
+                    ClearChildrenPointerOver(e, el, true);
+                    break;
+                }
+            }
+            if (clearRoot)
+            {
+                e.Source = element;
+                e.Handled = false;
+                element.RaiseEvent(e);
+            }
+        }
+
+        private void ClearPointerOver()
+        {
+            if (_lastPointer is not null)
+            {
+                var pointerEvent = new PointerEventDetails(0, new Point(-1, -1), PointerPointProperties.None, KeyModifiers.None);
+                ((IInputRoot)this).ClearPointerOver(_lastPointer, pointerEvent);
+            }
+        }
+
+        IInputElement? IInputRoot.SetPointerOver(IPointer pointer, PointerEventDetails pointerEvent)
+        {
+            pointer = pointer ?? throw new ArgumentNullException(nameof(pointer));
+            pointerEvent = pointerEvent ?? throw new ArgumentNullException(nameof(pointerEvent));
+
+            var pointerOverElement = ((IInputRoot)this).PointerOverElement;
+            if (pointer.Captured is { } captured)
+            {
+                if (pointerOverElement != captured)
+                {
+                    SetPointerOver(pointer, captured, pointerEvent);
+                }
+                return captured;
+            }
+            else
+            {
+                var element = this.InputHitTest(pointerEvent.Position);
+
+                if (element != pointerOverElement)
+                {
+                    if (element != null)
+                    {
+                        SetPointerOver(pointer, element, pointerEvent);
+                    }
+                    else
+                    {
+                        ((IInputRoot)this).ClearPointerOver(pointer, pointerEvent);
+                    }
+                }
+
+                return element;
+            }
+        }
+
+        private void SetPointerOver(IPointer pointer, IInputElement element, PointerEventDetails pointerEvent)
+        {
+            IInputElement? branch = null;
+
+            IInputElement? el = element;
+
+            while (el != null)
+            {
+                if (el.IsPointerOver)
+                {
+                    branch = el;
+                    break;
+                }
+                el = (IInputElement?)el.VisualParent;
+            }
+
+            el = ((IInputRoot)this).PointerOverElement;
+
+            var e = new PointerEventArgs(PointerLeaveEvent, el, pointer, this, pointerEvent.Position,
+                pointerEvent.Timestamp, pointerEvent.Properties, pointerEvent.InputModifiers);
+            if (el != null && branch != null && !el.IsAttachedToVisualTree)
+            {
+                ClearChildrenPointerOver(e, branch, false);
+            }
+
+            while (el != null && el != branch)
+            {
+                e.Source = el;
+                e.Handled = false;
+                el.RaiseEvent(e);
+                el = (IInputElement?)el.VisualParent;
+            }
+
+            el = ((IInputRoot)this).PointerOverElement = element;
+            //_lastActivePointerDevice = device;
+            _lastPointer = pointer;
+
+            e.RoutedEvent = InputElement.PointerEnterEvent;
+
+            while (el != null && el != branch)
+            {
+                e.Source = el;
+                e.Handled = false;
+                el.RaiseEvent(e);
+                el = (IInputElement?)el.VisualParent;
+            }
+        }
     }
 }

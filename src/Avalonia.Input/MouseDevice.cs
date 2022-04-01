@@ -21,27 +21,17 @@ namespace Avalonia.Input
 
         private readonly Pointer _pointer;
         private bool _disposed;
-        private PixelPoint? _position; 
+        private PixelPoint? _position;
+        private MouseButton _lastMouseDownButton;
 
         public MouseDevice(Pointer? pointer = null)
         {
             _pointer = pointer ?? new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, true);
         }
-        
-        /// <summary>
-        /// Gets the control that is currently capturing by the mouse, if any.
-        /// </summary>
-        /// <remarks>
-        /// When an element captures the mouse, it receives mouse input whether the cursor is 
-        /// within the control's bounds or not. To set the mouse capture, call the 
-        /// <see cref="Capture"/> method.
-        /// </remarks>
+
         [Obsolete("Use IPointer instead")]
         public IInputElement? Captured => _pointer.Captured;
 
-        /// <summary>
-        /// Gets the mouse position, in screen coordinates.
-        /// </summary>
         [Obsolete("Use events instead")]
         public PixelPoint Position
         {
@@ -49,15 +39,7 @@ namespace Avalonia.Input
             protected set => _position = value;
         }
 
-        /// <summary>
-        /// Captures mouse input to the specified control.
-        /// </summary>
-        /// <param name="control">The control.</param>
-        /// <remarks>
-        /// When an element captures the mouse, it receives mouse input whether the cursor is 
-        /// within the control's bounds or not. The current mouse capture control is exposed
-        /// by the <see cref="Captured"/> property.
-        /// </remarks>
+        [Obsolete("Use IPointer instead")]
         public void Capture(IInputElement? control)
         {
             _pointer.Capture(control);
@@ -90,18 +72,16 @@ namespace Avalonia.Input
                 ProcessRawEvent(margs);
         }
 
-        public void TopLevelClosed(IInputRoot root)
-        {
-            ClearPointerOver(this, 0, root, PointerPointProperties.None, KeyModifiers.None);
-        }
-
         public void SceneInvalidated(IInputRoot root, Rect rect)
         {
             // Pointer is outside of the target area
-            if (_position == null )
+            if (_position == null)
             {
                 if (root.PointerOverElement != null)
-                    ClearPointerOver(this, 0, root, PointerPointProperties.None, KeyModifiers.None);
+                {
+                    root.ClearPointerOver(_pointer,
+                        new PointerEventDetails(0, new Point(-1, -1), PointerPointProperties.None, KeyModifiers.None));
+                }
                 return;
             }
             
@@ -110,16 +90,8 @@ namespace Avalonia.Input
 
             if (rect.Contains(clientPoint))
             {
-                if (_pointer.Captured == null)
-                {
-                    SetPointerOver(this, 0 /* TODO: proper timestamp */, root, clientPoint,
-                        PointerPointProperties.None, KeyModifiers.None);
-                }
-                else
-                {
-                    SetPointerOver(this, 0 /* TODO: proper timestamp */, root, _pointer.Captured,
-                        PointerPointProperties.None, KeyModifiers.None);
-                }
+                _ = root.SetPointerOver(_pointer,
+                    new PointerEventDetails(0, clientPoint, PointerPointProperties.None, KeyModifiers.None));
             }
         }
 
@@ -138,7 +110,7 @@ namespace Avalonia.Input
                 rv++;
             return rv;
         }
-        
+
         private void ProcessRawEvent(RawPointerEventArgs e)
         {
             e = e ?? throw new ArgumentNullException(nameof(e));
@@ -147,15 +119,15 @@ namespace Avalonia.Input
             if(mouse._disposed)
                 return;
 
-            if (e.Type == RawPointerEventType.NonClientLeftButtonDown) return;
-
+            var oldPosition = _position;
             _position = e.Root.PointToScreen(e.Position);
             var props = CreateProperties(e);
             var keyModifiers = KeyModifiersUtils.ConvertToKey(e.InputModifiers);
             switch (e.Type)
             {
                 case RawPointerEventType.LeaveWindow:
-                    LeaveWindow(mouse, e.Timestamp, e.Root, props, keyModifiers);
+                case RawPointerEventType.NonClientLeftButtonDown:
+                    LeaveWindow(mouse, e.Timestamp, e.Root, oldPosition, props, keyModifiers);
                     break;
                 case RawPointerEventType.LeftButtonDown:
                 case RawPointerEventType.RightButtonDown:
@@ -196,14 +168,15 @@ namespace Avalonia.Input
             }
         }
 
-        private void LeaveWindow(IMouseDevice device, ulong timestamp, IInputRoot root, PointerPointProperties properties,
+        private void LeaveWindow(IMouseDevice device, ulong timestamp, IInputRoot root, PixelPoint? position, PointerPointProperties properties,
             KeyModifiers inputModifiers)
         {
             device = device ?? throw new ArgumentNullException(nameof(device));
             root = root ?? throw new ArgumentNullException(nameof(root));
 
+            var oldPosition = position.HasValue ? root.PointToClient(position.Value) : new Point(-1, -1);
             _position = null;
-            ClearPointerOver(this, timestamp, root, properties, inputModifiers);
+            root.ClearPointerOver(_pointer, new PointerEventDetails(timestamp, oldPosition, properties, inputModifiers));
         }
 
 
@@ -236,7 +209,6 @@ namespace Avalonia.Input
             return new PointerPointProperties(args.InputModifiers, kind);
         }
 
-        private MouseButton _lastMouseDownButton;
         private bool MouseDown(IMouseDevice device, ulong timestamp, IInputElement root, Point p,
             PointerPointProperties properties,
             KeyModifiers inputModifiers)
@@ -281,17 +253,7 @@ namespace Avalonia.Input
             device = device ?? throw new ArgumentNullException(nameof(device));
             root = root ?? throw new ArgumentNullException(nameof(root));
 
-            IInputElement? source;
-
-            if (_pointer.Captured == null)
-            {
-                source = SetPointerOver(this, timestamp, root, p,  properties, inputModifiers);
-            }
-            else
-            {
-                SetPointerOver(this, timestamp, root, _pointer.Captured, properties, inputModifiers);
-                source = _pointer.Captured;
-            }
+            var source = root.SetPointerOver(_pointer, new PointerEventDetails(timestamp, p, properties, inputModifiers));
 
             if (source is object)
             {
@@ -435,137 +397,15 @@ namespace Avalonia.Input
             return _pointer.Captured ?? root.InputHitTest(p);
         }
 
-        PointerEventArgs CreateSimpleEvent(RoutedEvent ev, ulong timestamp, IInteractive? source,
-            PointerPointProperties properties,
-            KeyModifiers inputModifiers)
-        {
-            return new PointerEventArgs(ev, source, _pointer, null, default,
-                timestamp, properties, inputModifiers);
-        }
-
-        private void ClearPointerOver(IPointerDevice device, ulong timestamp, IInputRoot root,
-            PointerPointProperties properties,
-            KeyModifiers inputModifiers)
-        {
-            device = device ?? throw new ArgumentNullException(nameof(device));
-            root = root ?? throw new ArgumentNullException(nameof(root));
-
-            var element = root.PointerOverElement;
-            var e = CreateSimpleEvent(InputElement.PointerLeaveEvent, timestamp, element, properties, inputModifiers);
-
-            if (element!=null && !element.IsAttachedToVisualTree)
-            {
-                // element has been removed from visual tree so do top down cleanup
-                if (root.IsPointerOver)
-                    ClearChildrenPointerOver(e, root,true);
-            }
-            while (element != null)
-            {
-                e.Source = element;
-                e.Handled = false;
-                element.RaiseEvent(e);
-                element = (IInputElement?)element.VisualParent;
-            }
-            
-            root.PointerOverElement = null;
-        }
-
-        private void ClearChildrenPointerOver(PointerEventArgs e, IInputElement element,bool clearRoot)
-        {
-            foreach (IInputElement el in element.VisualChildren)
-            {
-                if (el.IsPointerOver)
-                {
-                    ClearChildrenPointerOver(e, el, true);
-                    break;
-                }
-            }
-            if(clearRoot)
-            {
-                e.Source = element;
-                e.Handled = false;
-                element.RaiseEvent(e);
-            }
-        }
-
-        private IInputElement? SetPointerOver(IPointerDevice device, ulong timestamp, IInputRoot root, Point p, 
-            PointerPointProperties properties,
-            KeyModifiers inputModifiers)
-        {
-            device = device ?? throw new ArgumentNullException(nameof(device));
-            root = root ?? throw new ArgumentNullException(nameof(root));
-
-            var element = root.InputHitTest(p);
-
-            if (element != root.PointerOverElement)
-            {
-                if (element != null)
-                {
-                    SetPointerOver(device, timestamp, root, element, properties, inputModifiers);
-                }
-                else
-                {
-                    ClearPointerOver(device, timestamp, root, properties, inputModifiers);
-                }
-            }
-
-            return element;
-        }
-
-        private void SetPointerOver(IPointerDevice device, ulong timestamp, IInputRoot root, IInputElement element,
-            PointerPointProperties properties,
-            KeyModifiers inputModifiers)
-        {
-            device = device ?? throw new ArgumentNullException(nameof(device));
-            root = root ?? throw new ArgumentNullException(nameof(root));
-            element = element ?? throw new ArgumentNullException(nameof(element));
-
-            IInputElement? branch = null;
-
-            IInputElement? el = element;
-
-            while (el != null)
-            {
-                if (el.IsPointerOver)
-                {
-                    branch = el;
-                    break;
-                }
-                el = (IInputElement?)el.VisualParent;
-            }
-
-            el = root.PointerOverElement;
-
-            var e = CreateSimpleEvent(InputElement.PointerLeaveEvent, timestamp, el, properties, inputModifiers);
-            if (el!=null && branch!=null && !el.IsAttachedToVisualTree)
-            {
-                ClearChildrenPointerOver(e,branch,false);
-            }
-            
-            while (el != null && el != branch)
-            {
-                e.Source = el;
-                e.Handled = false;
-                el.RaiseEvent(e);
-                el = (IInputElement?)el.VisualParent;
-            }            
-
-            el = root.PointerOverElement = element;
-            e.RoutedEvent = InputElement.PointerEnterEvent;
-
-            while (el != null && el != branch)
-            {
-                e.Source = el;
-                e.Handled = false;
-                el.RaiseEvent(e);
-                el = (IInputElement?)el.VisualParent;
-            }
-        }
-
         public void Dispose()
         {
             _disposed = true;
             _pointer?.Dispose();
+        }
+
+        public void TopLevelClosed(IInputRoot root)
+        {
+            // no-op
         }
     }
 }

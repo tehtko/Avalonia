@@ -3,22 +3,27 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Input.Raw;
 using Avalonia.Platform;
+using Avalonia.VisualTree;
 
 namespace Avalonia.Input
 {
     /// <summary>
     /// Handles raw touch events
+    /// </summary>
     /// <remarks>
     /// This class is supposed to be used on per-toplevel basis, don't use a shared one
     /// </remarks>
-    /// </summary>
-    public class TouchDevice : IInputDevice, IDisposable
+    public class TouchDevice : IPointerDevice, IDisposable
     {
         private readonly Dictionary<long, Pointer> _pointers = new Dictionary<long, Pointer>();
         private bool _disposed;
         private int _clickCount;
         private Rect _lastClickRect;
         private ulong _lastClickTime;
+        private Pointer? _lastPointer;
+
+        IInputElement? IPointerDevice.Captured => _lastPointer?.Captured;
+
         KeyModifiers GetKeyModifiers(RawInputModifiers modifiers) =>
             (KeyModifiers)(modifiers & RawInputModifiers.KeyboardMask);
 
@@ -29,6 +34,10 @@ namespace Avalonia.Input
                 rv |= RawInputModifiers.LeftMouseButton;
             return rv;
         }
+
+        void IPointerDevice.Capture(IInputElement? control) => _lastPointer?.Capture(control);
+
+        Point IPointerDevice.GetPosition(IVisual relativeTo) => default;
 
         public void ProcessRawEvent(RawInputEventArgs ev)
         {
@@ -45,6 +54,7 @@ namespace Avalonia.Input
                     PointerType.Touch, _pointers.Count == 0);
                 pointer.Capture(hit);
             }
+            _lastPointer = pointer;
 
 
             var target = pointer.Captured ?? args.Root;
@@ -89,6 +99,7 @@ namespace Avalonia.Input
                             PointerUpdateKind.LeftButtonReleased),
                         GetKeyModifiers(args.InputModifiers), MouseButton.Left));
                 }
+                _lastPointer = null;
             }
 
             if (args.Type == RawPointerEventType.TouchCancel)
@@ -96,6 +107,7 @@ namespace Avalonia.Input
                 _pointers.Remove(args.TouchPointId);
                 using (pointer)
                     pointer.Capture(null);
+                _lastPointer = null;
             }
 
             if (args.Type == RawPointerEventType.TouchUpdate)
@@ -121,5 +133,10 @@ namespace Avalonia.Input
                 p.Dispose();
         }
 
+        public void SceneInvalidated(IInputRoot root, Rect rect)
+        {
+            // Touch input doesn't generate pointer entered/exited events,
+            // So we have nothing to invalidate here.
+        }
     }
 }

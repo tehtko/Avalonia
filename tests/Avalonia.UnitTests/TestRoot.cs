@@ -110,5 +110,14 @@ namespace Avalonia.UnitTests
             }
             Visit(this, true);
         }
+
+        public virtual void ClearPointerOver(IPointer pointer, PointerEventDetails pointerEvent)
+        {
+        }
+
+        public virtual IInputElement SetPointerOver(IPointer pointer, PointerEventDetails pointerEvent)
+        {
+            return null;
+        }
     }
 }
