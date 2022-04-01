@@ -506,7 +506,8 @@ namespace Avalonia.Controls
         /// <param name="e">The event args.</param>
         private void HandleInput(RawInputEventArgs e)
         {
-            if (e.Device != _lastActivePointerDevice)
+            if (e.Device is IPointerDevice
+                && e.Device != _lastActivePointerDevice)
             {
                 ClearPointerOver();
             }
