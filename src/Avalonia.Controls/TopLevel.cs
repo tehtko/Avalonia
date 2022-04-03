@@ -84,13 +84,13 @@ namespace Avalonia.Controls
         private readonly IKeyboardNavigationHandler? _keyboardNavigationHandler;
         private readonly IPlatformRenderInterface? _renderInterface;
         private readonly IGlobalStyles? _globalStyles;
+        private readonly PointerOverPreProcessor? _pointerOverPreProcessor;
+        private readonly IDisposable? _pointerOverPreProcessorSubscription;
         private Size _clientSize;
         private Size? _frameSize;
         private WindowTransparencyLevel _actualTransparencyLevel;
         private ILayoutManager? _layoutManager;
         private Border? _transparencyFallbackBorder;
-        private IPointerDevice? _lastActivePointerDevice;
-        private (IPointer pointer, PixelPoint position)? _lastPointer;
 
         /// <summary>
         /// Initializes static members of the <see cref="TopLevel"/> class.
@@ -195,7 +195,8 @@ namespace Avalonia.Controls
 
             impl.LostFocus += PlatformImpl_LostFocus;
 
-            AddHandler(PointerMovedEvent, HandleOnPointerMovedEvent, Interactivity.RoutingStrategies.Tunnel);
+            _pointerOverPreProcessor = new PointerOverPreProcessor(this);
+            _pointerOverPreProcessorSubscription = _inputManager?.PreProcess.Subscribe(_pointerOverPreProcessor);
         }
 
         /// <summary>
@@ -372,7 +373,9 @@ namespace Avalonia.Controls
             Renderer?.Dispose();
             Renderer = null!;
 
-            ClearPointerOver();
+            _pointerOverPreProcessor?.OnCompleted();
+            _pointerOverPreProcessorSubscription?.Dispose();
+
             PlatformImpl = null;
 
             var logicalArgs = new LogicalTreeAttachmentEventArgs(this, this, null);
@@ -508,51 +511,12 @@ namespace Avalonia.Controls
         /// <param name="e">The event args.</param>
         private void HandleInput(RawInputEventArgs e)
         {
-            if (e.Device is IPointerDevice
-                && e.Device != _lastActivePointerDevice)
-            {
-                ClearPointerOver();
-            }
-
-            // Set last active device before processing input, because ClearPointerOver might be called and clear last device.
-            _lastActivePointerDevice = e.Device as IPointerDevice;
-
-            if (e is RawPointerEventArgs { Type: RawPointerEventType.LeaveWindow or RawPointerEventType.NonClientLeftButtonDown }
-                && _lastPointer is (var pointer, var position))
-            {
-                _lastPointer = null;
-                ClearPointerOver(pointer, 0, this.PointToClient(position), PointerPointProperties.None, KeyModifiers.None);
-            }
-
             _inputManager?.ProcessInput(e);
-        }
-
-        private void HandleOnPointerMovedEvent(object? sender, PointerEventArgs e)
-        {
-            // Do not set pointerover on touch input.
-            if (e.Pointer.Type != PointerType.Touch)
-            {
-                var point = e.GetCurrentPoint(null);
-                SetPointerOver(e.Pointer, e.Source as IInputElement, e.Timestamp, point.Position, point.Properties, e.KeyModifiers);
-            }
         }
 
         private void SceneInvalidated(object? sender, SceneInvalidatedEventArgs e)
         {
-            // Pointer is outside of the target area
-            if (_lastPointer is (var pointer, var position))
-            {
-                var clientPoint = this.PointToClient(position);
-
-                if (e.DirtyRect.Contains(clientPoint))
-                {
-                    SetPointerOver(pointer, null, 0, clientPoint, PointerPointProperties.None, KeyModifiers.None);
-                }
-                else if (!Bounds.Contains(clientPoint))
-                {
-                    ClearPointerOver(pointer, 0, new Point(-1,-1), PointerPointProperties.None, KeyModifiers.None);
-                }
-            }
+            _pointerOverPreProcessor?.SceneInvalidated(e.DirtyRect);
         }
 
         void PlatformImpl_LostFocus()
@@ -569,135 +533,5 @@ namespace Avalonia.Controls
 
         ITextInputMethodImpl? ITextInputMethodRoot.InputMethod =>
             (PlatformImpl as ITopLevelImplWithTextInputMethod)?.TextInputMethod;
-
-        private void ClearPointerOver(IPointer pointer,
-            ulong timestamp, Point position, PointerPointProperties properties, KeyModifiers inputModifiers)
-        {
-            var element = ((IInputRoot)this).PointerOverElement;
-            if (element is null)
-            {
-                return;
-            }
-
-            // Do not pass rootVisual, when we have unknown (negative) position,
-            // so GetPosition won't return invalid values.
-            var hasPosition = position.X >= 0 && position.Y >= 0;
-            var e = new PointerEventArgs(PointerLeaveEvent, element, pointer,
-                hasPosition ? this : null, hasPosition ? position : default,
-                timestamp, properties, inputModifiers);
-
-            if (element != null && !element.IsAttachedToVisualTree)
-            {
-                // element has been removed from visual tree so do top down cleanup
-                if (IsPointerOver)
-                {
-                    ClearChildrenPointerOver(e, this, true);
-                }
-            }
-            while (element != null)
-            {
-                e.Source = element;
-                e.Handled = false;
-                element.RaiseEvent(e);
-                element = (IInputElement?)element.VisualParent;
-            }
-
-            ClearValue(PointerOverElementProperty);
-            _lastActivePointerDevice = null;
-            _lastPointer = null;
-        }
-
-        private void ClearChildrenPointerOver(PointerEventArgs e, IInputElement element, bool clearRoot)
-        {
-            foreach (IInputElement el in element.VisualChildren)
-            {
-                if (el.IsPointerOver)
-                {
-                    ClearChildrenPointerOver(e, el, true);
-                    break;
-                }
-            }
-            if (clearRoot)
-            {
-                e.Source = element;
-                e.Handled = false;
-                element.RaiseEvent(e);
-            }
-        }
-
-        private void ClearPointerOver()
-        {
-            if (_lastPointer is (var pointer, var _))
-            {
-                ClearPointerOver(pointer, 0, new Point(-1, -1), PointerPointProperties.None, KeyModifiers.None);
-            }
-        }
-
-        private void SetPointerOver(IPointer pointer, IInputElement? source,
-            ulong timestamp, Point position, PointerPointProperties properties, KeyModifiers inputModifiers)
-        {
-            var pointerOverElement = ((IInputRoot)this).PointerOverElement;
-            var element = source ?? this.InputHitTest(position);
-
-            if (element != pointerOverElement)
-            {
-                if (element != null)
-                {
-                    SetPointerOverToElement(pointer, element, timestamp, position, properties, inputModifiers);
-                }
-                else
-                {
-                    ClearPointerOver(pointer, timestamp, position, properties, inputModifiers);
-                }
-            }
-        }
-
-        private void SetPointerOverToElement(IPointer pointer, IInputElement element,
-            ulong timestamp, Point position, PointerPointProperties properties, KeyModifiers inputModifiers)
-        {
-            IInputElement? branch = null;
-
-            IInputElement? el = element;
-
-            while (el != null)
-            {
-                if (el.IsPointerOver)
-                {
-                    branch = el;
-                    break;
-                }
-                el = (IInputElement?)el.VisualParent;
-            }
-
-            el = ((IInputRoot)this).PointerOverElement;
-
-            var e = new PointerEventArgs(PointerLeaveEvent, el, pointer, this, position,
-                timestamp, properties, inputModifiers);
-            if (el != null && branch != null && !el.IsAttachedToVisualTree)
-            {
-                ClearChildrenPointerOver(e, branch, false);
-            }
-
-            while (el != null && el != branch)
-            {
-                e.Source = el;
-                e.Handled = false;
-                el.RaiseEvent(e);
-                el = (IInputElement?)el.VisualParent;
-            }
-
-            el = ((IInputRoot)this).PointerOverElement = element;
-            _lastPointer = (pointer, this.PointToScreen(position));
-
-            e.RoutedEvent = InputElement.PointerEnterEvent;
-
-            while (el != null && el != branch)
-            {
-                e.Source = el;
-                e.Handled = false;
-                el.RaiseEvent(e);
-                el = (IInputElement?)el.VisualParent;
-            }
-        }
     }
 }

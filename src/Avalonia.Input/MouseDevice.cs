@@ -96,10 +96,9 @@ namespace Avalonia.Input
             if(mouse._disposed)
                 return;
 
-            var oldPosition = _position;
             _position = e.Root.PointToScreen(e.Position);
             var props = CreateProperties(e);
-            var keyModifiers = KeyModifiersUtils.ConvertToKey(e.InputModifiers);
+            var keyModifiers = e.InputModifiers.ToKeyModifiers();
             switch (e.Type)
             {
                 case RawPointerEventType.LeaveWindow:
@@ -112,7 +111,7 @@ namespace Avalonia.Input
                 case RawPointerEventType.XButton1Down:
                 case RawPointerEventType.XButton2Down:
                     if (ButtonCount(props) > 1)
-                        e.Handled = MouseMove(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers, e.IntermediatePoints);
+                        e.Handled = MouseMove(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers, e.IntermediatePoints, e.KnownHitTestResult);
                     else
                         e.Handled = MouseDown(mouse, e.Timestamp, e.Root, e.Position,
                             props, keyModifiers);
@@ -123,12 +122,12 @@ namespace Avalonia.Input
                 case RawPointerEventType.XButton1Up:
                 case RawPointerEventType.XButton2Up:
                     if (ButtonCount(props) != 0)
-                        e.Handled = MouseMove(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers, e.IntermediatePoints);
+                        e.Handled = MouseMove(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers, e.IntermediatePoints, e.KnownHitTestResult);
                     else
                         e.Handled = MouseUp(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers);
                     break;
                 case RawPointerEventType.Move:
-                    e.Handled = MouseMove(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers, e.IntermediatePoints);
+                    e.Handled = MouseMove(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers, e.IntermediatePoints, e.KnownHitTestResult);
                     break;
                 case RawPointerEventType.Wheel:
                     e.Handled = MouseWheel(mouse, e.Timestamp, e.Root, e.Position, props, ((RawMouseWheelEventArgs)e).Delta, keyModifiers);
@@ -152,31 +151,7 @@ namespace Avalonia.Input
 
         PointerPointProperties CreateProperties(RawPointerEventArgs args)
         {
-
-            var kind = PointerUpdateKind.Other;
-
-            if (args.Type == RawPointerEventType.LeftButtonDown)
-                kind = PointerUpdateKind.LeftButtonPressed;
-            if (args.Type == RawPointerEventType.MiddleButtonDown)
-                kind = PointerUpdateKind.MiddleButtonPressed;
-            if (args.Type == RawPointerEventType.RightButtonDown)
-                kind = PointerUpdateKind.RightButtonPressed;
-            if (args.Type == RawPointerEventType.XButton1Down)
-                kind = PointerUpdateKind.XButton1Pressed;
-            if (args.Type == RawPointerEventType.XButton2Down)
-                kind = PointerUpdateKind.XButton2Pressed;
-            if (args.Type == RawPointerEventType.LeftButtonUp)
-                kind = PointerUpdateKind.LeftButtonReleased;
-            if (args.Type == RawPointerEventType.MiddleButtonUp)
-                kind = PointerUpdateKind.MiddleButtonReleased;
-            if (args.Type == RawPointerEventType.RightButtonUp)
-                kind = PointerUpdateKind.RightButtonReleased;
-            if (args.Type == RawPointerEventType.XButton1Up)
-                kind = PointerUpdateKind.XButton1Released;
-            if (args.Type == RawPointerEventType.XButton2Up)
-                kind = PointerUpdateKind.XButton2Released;
-            
-            return new PointerPointProperties(args.InputModifiers, kind);
+            return new PointerPointProperties(args.InputModifiers, args.Type.ToUpdateKind());
         }
 
         private bool MouseDown(IMouseDevice device, ulong timestamp, IInputElement root, Point p,
@@ -217,13 +192,14 @@ namespace Avalonia.Input
             return false;
         }
 
-        private bool MouseMove(IMouseDevice device, ulong timestamp, IInputRoot root, Point p, PointerPointProperties properties,
-            KeyModifiers inputModifiers, Lazy<IReadOnlyList<RawPointerPoint>?>? intermediatePoints)
+        private bool MouseMove(IMouseDevice device, ulong timestamp, IInputRoot root, Point p,
+            PointerPointProperties properties, KeyModifiers inputModifiers, Lazy<IReadOnlyList<RawPointerPoint>?>? intermediatePoints,
+            IInputElement? knownHitTest)
         {
             device = device ?? throw new ArgumentNullException(nameof(device));
             root = root ?? throw new ArgumentNullException(nameof(root));
 
-            var source = _pointer.Captured ?? root.InputHitTest(p);
+            var source = knownHitTest ?? _pointer.Captured ?? root.InputHitTest(p);
 
             if (source is object)
             {
@@ -383,6 +359,11 @@ namespace Avalonia.Input
         public void SceneInvalidated(IInputRoot root, Rect rect)
         {
             // no-op
+        }
+
+        public IPointer? TryGetPointer(RawPointerEventArgs ev)
+        {
+            return _pointer;
         }
     }
 }

@@ -24,9 +24,6 @@ namespace Avalonia.Input
 
         IInputElement? IPointerDevice.Captured => _lastPointer?.Captured;
 
-        KeyModifiers GetKeyModifiers(RawInputModifiers modifiers) =>
-            (KeyModifiers)(modifiers & RawInputModifiers.KeyboardMask);
-
         RawInputModifiers GetModifiers(RawInputModifiers modifiers, bool isLeftButtonDown)
         {
             var rv = modifiers &= RawInputModifiers.KeyboardMask;
@@ -56,8 +53,10 @@ namespace Avalonia.Input
             }
             _lastPointer = pointer;
 
-
             var target = pointer.Captured ?? args.Root;
+            var updateKind = args.Type.ToUpdateKind();
+            var keyModifier = args.InputModifiers.ToKeyModifiers();
+
             if (args.Type == RawPointerEventType.TouchBegin)
             {
                 if (_pointers.Count > 1)
@@ -83,9 +82,8 @@ namespace Avalonia.Input
 
                 target.RaiseEvent(new PointerPressedEventArgs(target, pointer,
                     args.Root, args.Position, ev.Timestamp,
-                    new PointerPointProperties(GetModifiers(args.InputModifiers, true),
-                        PointerUpdateKind.LeftButtonPressed),
-                    GetKeyModifiers(args.InputModifiers), _clickCount));
+                    new PointerPointProperties(GetModifiers(args.InputModifiers, true), updateKind),
+                    keyModifier, _clickCount));
             }
 
             if (args.Type == RawPointerEventType.TouchEnd)
@@ -95,9 +93,8 @@ namespace Avalonia.Input
                 {
                     target.RaiseEvent(new PointerReleasedEventArgs(target, pointer,
                         args.Root, args.Position, ev.Timestamp,
-                        new PointerPointProperties(GetModifiers(args.InputModifiers, false),
-                            PointerUpdateKind.LeftButtonReleased),
-                        GetKeyModifiers(args.InputModifiers), MouseButton.Left));
+                        new PointerPointProperties(GetModifiers(args.InputModifiers, false), updateKind),
+                        keyModifier, MouseButton.Left));
                 }
                 _lastPointer = null;
             }
@@ -112,14 +109,11 @@ namespace Avalonia.Input
 
             if (args.Type == RawPointerEventType.TouchUpdate)
             {
-                var modifiers = GetModifiers(args.InputModifiers, pointer.IsPrimary);
                 target.RaiseEvent(new PointerEventArgs(InputElement.PointerMovedEvent, target, pointer, args.Root,
                     args.Position, ev.Timestamp,
-                    new PointerPointProperties(GetModifiers(args.InputModifiers, true), PointerUpdateKind.Other),
-                    GetKeyModifiers(args.InputModifiers), args.IntermediatePoints));
+                    new PointerPointProperties(GetModifiers(args.InputModifiers, true), updateKind),
+                    keyModifier, args.IntermediatePoints));
             }
-
-
         }
 
         public void Dispose()
@@ -131,6 +125,14 @@ namespace Avalonia.Input
             _disposed = true;
             foreach (var p in values)
                 p.Dispose();
+        }
+
+        public IPointer? TryGetPointer(RawPointerEventArgs ev)
+        {
+            return ev is RawTouchEventArgs args
+                && _pointers.TryGetValue(args.TouchPointId, out var pointer)
+                ? pointer
+                : null;
         }
     }
 }
