@@ -193,6 +193,9 @@ namespace Avalonia.Controls.UnitTests
         public void Impl_Input_Should_Pass_Input_To_InputManager()
         {
             var inputManagerMock = new Mock<IInputManager>();
+            inputManagerMock.DefaultValue = DefaultValue.Mock;
+            inputManagerMock.SetupAllProperties();
+
             var services = TestServices.StyledWindow.With(inputManager: inputManagerMock.Object);
 
             using (UnitTestApplication.Start(services))

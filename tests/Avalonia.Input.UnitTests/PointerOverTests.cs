@@ -151,9 +151,6 @@ namespace Avalonia.Input.UnitTests
             Assert.True(border.IsPointerOver);
             Assert.False(canvas.IsPointerOver);
             Assert.True(root.IsPointerOver);
-
-            renderer.Verify(x => x.HitTest(It.IsAny<Point>(), It.IsAny<IVisual>(), It.IsAny<Func<IVisual, bool>>()), Times.Never);
-            renderer.Verify(x => x.HitTestFirst(It.IsAny<Point>(), It.IsAny<IVisual>(), It.IsAny<Func<IVisual, bool>>()), Times.Never);
         }
 
         [Fact]
