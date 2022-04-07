@@ -45,7 +45,7 @@ namespace Avalonia.Input
             {
                 if (args.Type == RawPointerEventType.TouchEnd)
                     return;
-                var hit = args.Root.InputHitTest(args.Position);
+                var hit = args.InputHitTestResult;
 
                 _pointers[args.TouchPointId] = pointer = new Pointer(Pointer.GetNextFreeId(),
                     PointerType.Touch, _pointers.Count == 0);

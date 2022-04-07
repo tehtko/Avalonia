@@ -121,7 +121,7 @@ namespace Avalonia.Input.Raw
         /// </summary>
         public Lazy<IReadOnlyList<RawPointerPoint>?>? IntermediatePoints { get; set; }
 
-        internal IInputElement? KnownHitTestResult { get; set; }
+        internal IInputElement? InputHitTestResult { get; set; }
     }
 
     public struct RawPointerPoint

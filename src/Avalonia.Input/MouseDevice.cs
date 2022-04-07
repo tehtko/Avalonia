@@ -111,10 +111,9 @@ namespace Avalonia.Input
                 case RawPointerEventType.XButton1Down:
                 case RawPointerEventType.XButton2Down:
                     if (ButtonCount(props) > 1)
-                        e.Handled = MouseMove(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers, e.IntermediatePoints, e.KnownHitTestResult);
+                        e.Handled = MouseMove(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers, e.IntermediatePoints, e.InputHitTestResult);
                     else
-                        e.Handled = MouseDown(mouse, e.Timestamp, e.Root, e.Position,
-                            props, keyModifiers);
+                        e.Handled = MouseDown(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers, e.InputHitTestResult);
                     break;
                 case RawPointerEventType.LeftButtonUp:
                 case RawPointerEventType.RightButtonUp:
@@ -122,24 +121,24 @@ namespace Avalonia.Input
                 case RawPointerEventType.XButton1Up:
                 case RawPointerEventType.XButton2Up:
                     if (ButtonCount(props) != 0)
-                        e.Handled = MouseMove(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers, e.IntermediatePoints, e.KnownHitTestResult);
+                        e.Handled = MouseMove(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers, e.IntermediatePoints, e.InputHitTestResult);
                     else
-                        e.Handled = MouseUp(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers);
+                        e.Handled = MouseUp(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers, e.InputHitTestResult);
                     break;
                 case RawPointerEventType.Move:
-                    e.Handled = MouseMove(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers, e.IntermediatePoints, e.KnownHitTestResult);
+                    e.Handled = MouseMove(mouse, e.Timestamp, e.Root, e.Position, props, keyModifiers, e.IntermediatePoints, e.InputHitTestResult);
                     break;
                 case RawPointerEventType.Wheel:
-                    e.Handled = MouseWheel(mouse, e.Timestamp, e.Root, e.Position, props, ((RawMouseWheelEventArgs)e).Delta, keyModifiers);
+                    e.Handled = MouseWheel(mouse, e.Timestamp, e.Root, e.Position, props, ((RawMouseWheelEventArgs)e).Delta, keyModifiers, e.InputHitTestResult);
                     break;
                 case RawPointerEventType.Magnify:
-                    e.Handled = GestureMagnify(mouse, e.Timestamp, e.Root, e.Position, props, ((RawPointerGestureEventArgs)e).Delta, keyModifiers);
+                    e.Handled = GestureMagnify(mouse, e.Timestamp, e.Root, e.Position, props, ((RawPointerGestureEventArgs)e).Delta, keyModifiers, e.InputHitTestResult);
                     break;
                 case RawPointerEventType.Rotate:
-                    e.Handled = GestureRotate(mouse, e.Timestamp, e.Root, e.Position, props, ((RawPointerGestureEventArgs)e).Delta, keyModifiers);
+                    e.Handled = GestureRotate(mouse, e.Timestamp, e.Root, e.Position, props, ((RawPointerGestureEventArgs)e).Delta, keyModifiers, e.InputHitTestResult);
                     break;
                 case RawPointerEventType.Swipe:
-                    e.Handled = GestureSwipe(mouse, e.Timestamp, e.Root, e.Position, props, ((RawPointerGestureEventArgs)e).Delta, keyModifiers);
+                    e.Handled = GestureSwipe(mouse, e.Timestamp, e.Root, e.Position, props, ((RawPointerGestureEventArgs)e).Delta, keyModifiers, e.InputHitTestResult);
                     break;
             }
         }
@@ -156,17 +155,16 @@ namespace Avalonia.Input
 
         private bool MouseDown(IMouseDevice device, ulong timestamp, IInputElement root, Point p,
             PointerPointProperties properties,
-            KeyModifiers inputModifiers)
+            KeyModifiers inputModifiers, IInputElement? hitTest)
         {
             device = device ?? throw new ArgumentNullException(nameof(device));
             root = root ?? throw new ArgumentNullException(nameof(root));
 
-            var hit = HitTest(root, p);
+            var source = _pointer.Captured ?? root.InputHitTest(p);
 
-            if (hit != null)
+            if (source != null)
             {
-                _pointer.Capture(hit);
-                var source = GetSource(hit);
+                _pointer.Capture(source);
                 if (source != null)
                 {
                     var settings = AvaloniaLocator.Current.GetService<IPlatformSettings>();
@@ -194,12 +192,12 @@ namespace Avalonia.Input
 
         private bool MouseMove(IMouseDevice device, ulong timestamp, IInputRoot root, Point p,
             PointerPointProperties properties, KeyModifiers inputModifiers, Lazy<IReadOnlyList<RawPointerPoint>?>? intermediatePoints,
-            IInputElement? knownHitTest)
+            IInputElement? hitTest)
         {
             device = device ?? throw new ArgumentNullException(nameof(device));
             root = root ?? throw new ArgumentNullException(nameof(root));
 
-            var source = knownHitTest ?? _pointer.Captured ?? root.InputHitTest(p);
+            var source = _pointer.Captured ?? hitTest;
 
             if (source is object)
             {
@@ -214,13 +212,12 @@ namespace Avalonia.Input
         }
 
         private bool MouseUp(IMouseDevice device, ulong timestamp, IInputRoot root, Point p, PointerPointProperties props,
-            KeyModifiers inputModifiers)
+            KeyModifiers inputModifiers, IInputElement? hitTest)
         {
             device = device ?? throw new ArgumentNullException(nameof(device));
             root = root ?? throw new ArgumentNullException(nameof(root));
 
-            var hit = HitTest(root, p);
-            var source = GetSource(hit);
+            var source = _pointer.Captured ?? hitTest;
 
             if (source is not null)
             {
@@ -237,13 +234,12 @@ namespace Avalonia.Input
 
         private bool MouseWheel(IMouseDevice device, ulong timestamp, IInputRoot root, Point p,
             PointerPointProperties props,
-            Vector delta, KeyModifiers inputModifiers)
+            Vector delta, KeyModifiers inputModifiers, IInputElement? hitTest)
         {
             device = device ?? throw new ArgumentNullException(nameof(device));
             root = root ?? throw new ArgumentNullException(nameof(root));
 
-            var hit = HitTest(root, p);
-            var source = GetSource(hit);
+            var source = _pointer.Captured ?? hitTest;
 
             // KeyModifiers.Shift should scroll in horizontal direction. This does not work on every platform. 
             // If Shift-Key is pressed and X is close to 0 we swap the Vector.
@@ -264,16 +260,15 @@ namespace Avalonia.Input
         }
         
         private bool GestureMagnify(IMouseDevice device, ulong timestamp, IInputRoot root, Point p,
-            PointerPointProperties props, Vector delta, KeyModifiers inputModifiers)
+            PointerPointProperties props, Vector delta, KeyModifiers inputModifiers, IInputElement? hitTest)
         {
             device = device ?? throw new ArgumentNullException(nameof(device));
             root = root ?? throw new ArgumentNullException(nameof(root));
 
-            var hit = HitTest(root, p);
+            var source = _pointer.Captured ?? hitTest;
 
-            if (hit != null)
+            if (source != null)
             {
-                var source = GetSource(hit);
                 var e = new PointerDeltaEventArgs(Gestures.PointerTouchPadGestureMagnifyEvent, source,
                     _pointer, root, p, timestamp, props, inputModifiers, delta);
 
@@ -285,16 +280,15 @@ namespace Avalonia.Input
         }
         
         private bool GestureRotate(IMouseDevice device, ulong timestamp, IInputRoot root, Point p,
-            PointerPointProperties props, Vector delta, KeyModifiers inputModifiers)
+            PointerPointProperties props, Vector delta, KeyModifiers inputModifiers, IInputElement? hitTest)
         {
             device = device ?? throw new ArgumentNullException(nameof(device));
             root = root ?? throw new ArgumentNullException(nameof(root));
 
-            var hit = HitTest(root, p);
+            var source = _pointer.Captured ?? hitTest;
 
-            if (hit != null)
+            if (source != null)
             {
-                var source = GetSource(hit);
                 var e = new PointerDeltaEventArgs(Gestures.PointerTouchPadGestureRotateEvent, source,
                     _pointer, root, p, timestamp, props, inputModifiers, delta);
 
@@ -306,16 +300,15 @@ namespace Avalonia.Input
         }
         
         private bool GestureSwipe(IMouseDevice device, ulong timestamp, IInputRoot root, Point p,
-            PointerPointProperties props, Vector delta, KeyModifiers inputModifiers)
+            PointerPointProperties props, Vector delta, KeyModifiers inputModifiers, IInputElement? hitTest)
         {
             device = device ?? throw new ArgumentNullException(nameof(device));
             root = root ?? throw new ArgumentNullException(nameof(root));
 
-            var hit = HitTest(root, p);
+            var source = _pointer.Captured ?? hitTest;
 
-            if (hit != null)
+            if (source != null)
             {
-                var source = GetSource(hit);
                 var e = new PointerDeltaEventArgs(Gestures.PointerTouchPadGestureSwipeEvent, source, 
                     _pointer, root, p, timestamp, props, inputModifiers, delta);
 
@@ -324,23 +317,6 @@ namespace Avalonia.Input
             }
 
             return false;
-        }
-
-        private IInteractive? GetSource(IVisual? hit)
-        {
-            if (hit is null)
-                return null;
-
-            return _pointer.Captured ??
-                (hit as IInteractive) ??
-                hit.GetSelfAndVisualAncestors().OfType<IInteractive>().FirstOrDefault();
-        }
-
-        private IInputElement? HitTest(IInputElement root, Point p)
-        {
-            root = root ?? throw new ArgumentNullException(nameof(root));
-
-            return _pointer.Captured ?? root.InputHitTest(p);
         }
 
         public void Dispose()

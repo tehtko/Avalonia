@@ -513,6 +513,11 @@ namespace Avalonia.Controls
         /// <param name="e">The event args.</param>
         private void HandleInput(RawInputEventArgs e)
         {
+            if (e is RawPointerEventArgs pointerArgs)
+            {
+                pointerArgs.InputHitTestResult = this.InputHitTest(pointerArgs.Position);
+            }
+
             _inputManager?.ProcessInput(e);
         }
 

@@ -3,7 +3,7 @@ using Avalonia.Input.Raw;
 
 namespace Avalonia.Input
 {
-    public class PointerOverPreProcessor : IObserver<RawInputEventArgs>
+    internal class PointerOverPreProcessor : IObserver<RawInputEventArgs>
     {
         private IPointerDevice? _lastActivePointerDevice;
         private (IPointer pointer, PixelPoint position)? _lastPointer;
@@ -49,9 +49,7 @@ namespace Avalonia.Input
                 else if (pointerDevice.TryGetPointer(args) is IPointer pointer
                     && pointer.Type != PointerType.Touch)
                 {
-                    var element = pointer.Captured
-                        // Pass internal value to property, so we can avoid double hit test for the single input args.
-                        ?? (args.KnownHitTestResult ??= args.Root.InputHitTest(args.Position));
+                    var element = pointer.Captured ?? args.InputHitTestResult;
 
                     SetPointerOver(pointer, args.Root, element, args.Timestamp, args.Position,
                         new PointerPointProperties(args.InputModifiers, args.Type.ToUpdateKind()),
@@ -69,7 +67,7 @@ namespace Avalonia.Input
 
                 if (dirtyRect.Contains(clientPoint))
                 {
-                    SetPointerOver(pointer, _inputRoot, null, 0, clientPoint, PointerPointProperties.None, KeyModifiers.None);
+                    SetPointerOver(pointer, _inputRoot, _inputRoot.InputHitTest(clientPoint), 0, clientPoint, PointerPointProperties.None, KeyModifiers.None);
                 }
                 else if (!_inputRoot.Bounds.Contains(clientPoint))
                 {
@@ -143,11 +141,10 @@ namespace Avalonia.Input
             }
         }
 
-        private void SetPointerOver(IPointer pointer, IInputRoot root, IInputElement? source,
+        private void SetPointerOver(IPointer pointer, IInputRoot root, IInputElement? element,
             ulong timestamp, Point position, PointerPointProperties properties, KeyModifiers inputModifiers)
         {
             var pointerOverElement = root.PointerOverElement;
-            var element = source ?? root.InputHitTest(position);
 
             if (element != pointerOverElement)
             {
